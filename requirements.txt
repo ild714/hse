@@ -3,8 +3,8 @@ numpy
 matplotlib
 seaborn
 scikit-learn
-factor_analyzer
-openpyxl
 scipy
-statsmodels
+openpyxl
+factor_analyzer
 jupyter
+ipykernel
