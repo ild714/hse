@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy.stats import spearmanr
+from scipy.stats import chi2_contingency, spearmanr
 
 from src.data_prep import load_dataset, nominal_columns, numeric_columns
 from src.factor import (
@@ -195,6 +195,71 @@ def main() -> None:
     plt.tight_layout()
     plt.savefig(FIGURES / "mca_axis_vs_level.png", dpi=150)
     plt.close()
+
+    # --- Паттерны работы по уровням ------------------------------------
+    section("7. ПАТТЕРНЫ РАБОТЫ ПО УРОВНЯМ ГРАМОТНОСТИ")
+
+    # Два принципиально разных вида пропуска, которые нельзя смешивать.
+    print("  Вид пропуска 1 — сбой логирования (лог не записан):")
+    broken_log = features["fulltime_is_missing"] == 1
+    share = pd.crosstab(broken_log, target, normalize="columns").loc[True]
+    chi2, p_value = chi2_contingency(pd.crosstab(broken_log, target))[:2]
+    print(f"    доля по уровням: {[round(v, 3) for v in share]}")
+    print(f"    chi2 p = {p_value:.3f} — связи с уровнем нет, "
+          "это технический артефакт")
+
+    print("\n  Вид пропуска 2 — задание не доведено до конца:")
+    for column in ["copymail_is_empty"]:
+        rate = features[column].groupby(target).mean()
+        rho = spearmanr(features[column], score).statistic
+        print(f"    {column}: {[round(v, 3) for v in rate]} (rho = {rho:+.3f})")
+    for column in ["private6", "wall4"]:
+        rate = (features[column] == "__MISSING__").groupby(target).mean()
+        print(f"    {column} без ответа: {[round(v, 3) for v in rate]}")
+
+    # Дальнейшие профили считаются только на респондентах с исправным логом:
+    # у остальных признаки просто отсутствуют и средние по ним бессмысленны.
+    working = features[~broken_log]
+    levels = target[~broken_log]
+    scores = score[~broken_log]
+    print(f"\n  подвыборка с исправным логом: {len(working)} чел.")
+
+    profile = working.groupby(levels).agg(
+        n=("fulltime", "size"),
+        время_мин=("fulltime", "median"),
+        Глаша_сред=("openglasha", "mean"),
+        подсветок_сред=("notion", "mean"),
+        источников=("citation_n_sources", "mean"),
+        адрес_верный=("copymail_has_correct_email", "mean"),
+        адрес_чисто=("copymail_is_exact_email", "mean"),
+    )
+    print("\n  поведенческий профиль:")
+    print(profile.round(3).to_string())
+    save(profile, "level_profile")
+
+    print("\n  связь с непрерывным баллом (rho Спирмена):")
+    behaviour_rho = []
+    for column in ["fulltime", "openglasha", "notion", "citation_n_sources",
+                   "copymail_has_correct_email", "copymail_is_exact_email"]:
+        rho = spearmanr(working[column], scores).statistic
+        behaviour_rho.append({"признак": column, "rho": rho})
+        print(f"    {column:28s} {rho:+.3f}")
+    save(pd.DataFrame(behaviour_rho).set_index("признак"), "behaviour_correlations")
+
+    print("\n  доля небезопасных ответов по уровням:")
+    unsafe = {
+        "private2": "О, прикольно, пусть все посмотрят этот сайт!",
+        "wall4": "Давайте все напишут свои номера телефонов, а мы им позвоним",
+        "private1": "Ничего себе, расскажу об этом в сообществе!",
+    }
+    for column, answer in unsafe.items():
+        rate = (working[column] == answer).groupby(levels).mean()
+        print(f"    {column:10s} {[round(v, 3) for v in rate]}")
+
+    print("\n  выбор приватности сообщества:")
+    privacy = pd.crosstab(levels, working["privacy"], normalize="index")
+    print(privacy.round(3).to_string())
+    save(privacy, "privacy_by_level")
 
     print(f"\nГотово. Таблицы: {RESULTS}, графики: {FIGURES}")
 
