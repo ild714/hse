@@ -1,10 +1,13 @@
 pandas
 numpy
+# factor_analyzer 0.5.1 обращается к check_array(force_all_finite=...),
+# который удалён в scikit-learn 1.8; поэтому версия ограничена сверху.
+scikit-learn>=1.3,<1.6
+scipy
 matplotlib
 seaborn
-scikit-learn
-scipy
 openpyxl
 factor_analyzer
+pytest
 jupyter
 ipykernel
